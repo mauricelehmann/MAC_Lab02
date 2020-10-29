@@ -13,6 +13,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class Evaluation {
 
@@ -97,6 +98,7 @@ public class Evaluation {
     }
 
     public static void main(String[] args) throws IOException {
+
         ///
         /// Reading queries and queries relations files
         ///
@@ -142,7 +144,7 @@ public class Evaluation {
         // you may want to call these methods to get:
         // -  The query results returned by Lucene i.e. computed/empirical
         //    documents retrieved
-        //        List<Integer> queryResults = lab2Index.search(query);
+        //        List<Integer> retrivedDocuments = lab2Index.search(query);
         //
         // - The true query results from qrels file i.e. genuine documents
         //   returned matching a query
@@ -161,12 +163,59 @@ public class Evaluation {
         // average precision at the 11 recall levels (0,0.1,0.2,...,1) over all queries
         double[] avgPrecisionAtRecallLevels = createZeroedRecalls();
 
+
+
+        //TODO : tout ça dans une boucle sur toutes les queries
+
+
+        double precision = 0.0;
+        double singleQueryAveragePrecision = 0.0;
+
+        //Get the docs results from the search
+        List<Integer> retrivedDocuments = lab2Index.search(queries.get(0));
+
+        //Skip the empty query results
+        if(retrivedDocuments.size() == 0){
+            //break; //TODO when loop
+        }
+        //Get the "true" revelants docs for the query
+        List<Integer> qrel = qrels.get(1);
+
+        //Sum the relevants docs
+        totalRelevantDocs += qrel.size();
+
+        //Sum the retrieved documents
+        totalRetrievedDocs += retrivedDocuments.size();
+
+        //TODO virer ça, faire le comptage directement dans la boucle getAveragePrecision() qu'il faut mettre directement ici !
+        //Get revelants docs by comparing all retrieved with the "true" revelants docs
+        List<Integer> revelantDocs = retrivedDocuments.stream().filter(qrel::contains).collect(Collectors.toList());
+        totalRetrievedRelevantDocs += revelantDocs.size();
+
+        //Precision is number of revelant doc in the query / all the docs (eg. 6/10)
+        precision += revelantDocs.size() / ((double) retrivedDocuments.size());
+
+        //Average precision for one query (AP)
+        singleQueryAveragePrecision = getAveragePrecision(retrivedDocuments, qrel);
+
+        meanAveragePrecision += singleQueryAveragePrecision;
+
+        //Sum for compute the mean later
+
+
+
+
         ///
         ///  Part IV - Display the metrics
         ///
 
         //TODO student implement what is needed (i.e. the metrics) to be able
         // to display the results
+
+        //Get the mean average precision (MAP)
+        avgPrecision = precision / (double)queries.size();
+        meanAveragePrecision = meanAveragePrecision / queries.size();
+
         displayMetrics(totalRetrievedDocs, totalRelevantDocs,
                 totalRetrievedRelevantDocs, avgPrecision, avgRecall, fMeasure,
                 meanAveragePrecision, avgRPrecision,
@@ -213,5 +262,24 @@ public class Evaluation {
         double[] recalls = new double[11];
         Arrays.fill(recalls, 0.0);
         return recalls;
+    }
+
+    private static double getAveragePrecision(List<Integer> retDocs, List<Integer> revDocs){
+
+        //We'll use an iterator for better time complexity
+        Iterator<Integer> iterator = retDocs.iterator();
+        int revelantDocsCounter = 0;
+        double precision = 0.0;
+
+        //Iterate on all retrieved documents
+        //Stop when : we iterate all the retrieved documents OR when we found all the revelant docs
+        for(int docIdx = 1; (docIdx <= retDocs.size()) || (revelantDocsCounter < revDocs.size()); docIdx++){
+            //If the doc in the retDocs list is a revelant document
+            if(revDocs.contains(iterator.next())){
+                revelantDocsCounter++;
+                precision += (revelantDocsCounter / (double)docIdx);
+            }
+        }
+        return precision / revelantDocsCounter;
     }
 }
