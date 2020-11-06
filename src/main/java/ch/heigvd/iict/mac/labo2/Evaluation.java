@@ -163,65 +163,121 @@ public class Evaluation {
         // average precision at the 11 recall levels (0,0.1,0.2,...,1) over all queries
         double[] avgPrecisionAtRecallLevels = createZeroedRecalls();
 
+        int nbQueries = queries.size();
+        //int nbQueries = 1;
+        //For every queries :
+        for (queryNumber = 0; (queryNumber < nbQueries); queryNumber++) {
+
+            //Get the docs results from the search
+            List<Integer> retrivedDocuments = lab2Index.search(queries.get(queryNumber));
+            //Skip the empty query results
+            if(retrivedDocuments.size() == 0){
+                continue;
+            }
+            //Get the "true" revelants docs for the query
+            List<Integer> qrel = qrels.get(queryNumber + 1);
+            //Some queries do not have "true" revelants docs
+            if(qrel == null) qrel = new ArrayList<>();
+
+            //Sum the relevants docs
+            totalRelevantDocs += qrel.size();
+            //Sum the retrieved documents
+            totalRetrievedDocs += retrivedDocuments.size();
 
 
-        //TODO : tout ça dans une boucle sur toutes les queries
+            //Compute average precision for a given query
+
+            // Will be, for this example of docs: [] [x] [] [] [x] (where [x] are revelant docs)
+            // AP == [(1 / 2) + (2 / 5)] / 2
+            // Recall == 1 if theire is 2 true revelants docs ((# of revelant documents founded in the retrieved document / # of "true" revelant documents)
+
+            //We'll use an iterator for better time complexity
+            Iterator<Integer> iterator = retrivedDocuments.iterator();
+            int revelantDocsCounter = 0;
+            double singleQueryAVGPrecision = 0.0;
+            double singleQueryRecall = 0.0;
+            double rPrecision = 0.0;
+            ArrayList<Double> precisionArray = new ArrayList<>();
+            ArrayList<Double> recallArray = new ArrayList<>();
 
 
-        double precision = 0.0;
-        double singleQueryAveragePrecision = 0.0;
+            //Iterate on all retrieved documents
+            //Stop when : we iterate all the retrieved documents OR when we found all the revelant docs
+            for(int docIdx = 1; (docIdx <= retrivedDocuments.size()) || (revelantDocsCounter < qrel.size()); docIdx++){
+                if(!iterator.hasNext()) break;
+                //If the doc in the retDocs list is a revelant document
+                if(qrel.contains(iterator.next())){
+                    revelantDocsCounter++;
+                    singleQueryAVGPrecision += (revelantDocsCounter / (double)docIdx);
+                    //Calculate the R-precision numerator
+                    if(docIdx <= qrel.size()){
+                        rPrecision += 1;
+                    }
+                }
+                double recall = revelantDocsCounter / (double) qrel.size();
+                double precision = revelantDocsCounter / (double) docIdx;
+                precisionArray.add(precision);
+                recallArray.add(recall);
+            }
+            //We define that if their is no "true" revelants documents at all, recall & AP are zero
+            if(qrel.size() == 0) {
+                singleQueryAVGPrecision = 0;
+                singleQueryRecall = 0;
+                rPrecision = 0;
+            } else {
+                singleQueryAVGPrecision = singleQueryAVGPrecision / (double) qrel.size();
+                singleQueryRecall = revelantDocsCounter / (double) qrel.size();
+                rPrecision = rPrecision / (double) qrel.size();
+            }
 
-        //Get the docs results from the search
-        List<Integer> retrivedDocuments = lab2Index.search(queries.get(0));
+            //Compute the Precision At Recall Levels
+            double[] precisionAtRecallLevels = getAvgPrecisionAtRecallLevels(precisionArray, recallArray);
+            for (int level= 0; level <= 10; level++) {
+                avgPrecisionAtRecallLevels[level] += precisionAtRecallLevels[level];
+            }
 
-        //Skip the empty query results
-        if(retrivedDocuments.size() == 0){
-            //break; //TODO when loop
+            //Sum the AP in the MAP
+            meanAveragePrecision += singleQueryAVGPrecision;
+
+            //Sum the recalls
+            avgRecall += singleQueryRecall;
+
+            //Precision is number of revelant doc in the query / all the docs (eg. 6/10)
+            avgPrecision += (revelantDocsCounter/ ((double) retrivedDocuments.size()));
+            totalRetrievedRelevantDocs += revelantDocsCounter;
+
+            //Sum the R-Precision
+            avgRPrecision += rPrecision;
         }
-        //Get the "true" revelants docs for the query
-        List<Integer> qrel = qrels.get(1);
+        //End of loop on every queries...
 
-        //Sum the relevants docs
-        totalRelevantDocs += qrel.size();
+        //Get the average precision over all queries
+        avgPrecision = avgPrecision / (double) nbQueries;
+        //Get the mean average precision (MAP)
+        meanAveragePrecision = meanAveragePrecision / (double) nbQueries;
+        //Get the average recall
+        avgRecall = avgRecall / (double) nbQueries;
 
-        //Sum the retrieved documents
-        totalRetrievedDocs += retrivedDocuments.size();
+        //Get the F-measure of average precision and average recall
+        fMeasure = (2 * avgPrecision * avgRecall ) / (avgPrecision + avgRecall);
 
-        //TODO virer ça, faire le comptage directement dans la boucle getAveragePrecision() qu'il faut mettre directement ici !
-        //Get revelants docs by comparing all retrieved with the "true" revelants docs
-        List<Integer> revelantDocs = retrivedDocuments.stream().filter(qrel::contains).collect(Collectors.toList());
-        totalRetrievedRelevantDocs += revelantDocs.size();
+        //Get the average R-Precision
+        avgRPrecision = avgRPrecision / (double) nbQueries;
 
-        //Precision is number of revelant doc in the query / all the docs (eg. 6/10)
-        precision += revelantDocs.size() / ((double) retrivedDocuments.size());
-
-        //Average precision for one query (AP)
-        singleQueryAveragePrecision = getAveragePrecision(retrivedDocuments, qrel);
-
-        meanAveragePrecision += singleQueryAveragePrecision;
-
-        //Sum for compute the mean later
-
-
-
+        //Compute the average Precision At Recall Levels
+        for (int level= 0; level <= 10; level++) {
+            avgPrecisionAtRecallLevels[level] = avgPrecisionAtRecallLevels[level] / (double) nbQueries;
+        }
 
         ///
         ///  Part IV - Display the metrics
         ///
-
-        //TODO student implement what is needed (i.e. the metrics) to be able
-        // to display the results
-
-        //Get the mean average precision (MAP)
-        avgPrecision = precision / (double)queries.size();
-        meanAveragePrecision = meanAveragePrecision / queries.size();
 
         displayMetrics(totalRetrievedDocs, totalRelevantDocs,
                 totalRetrievedRelevantDocs, avgPrecision, avgRecall, fMeasure,
                 meanAveragePrecision, avgRPrecision,
                 avgPrecisionAtRecallLevels);
     }
-
     private static void displayMetrics(
             int totalRetrievedDocs,
             int totalRelevantDocs,
@@ -264,8 +320,34 @@ public class Evaluation {
         return recalls;
     }
 
-    private static double getAveragePrecision(List<Integer> retDocs, List<Integer> revDocs){
+    private static double[] getAvgPrecisionAtRecallLevels(ArrayList<Double> precisionArray, ArrayList<Double> recallArray) {
 
+        double[] recalls = new double[11];
+
+        int index = 0;
+        for (int i = 0; i <= 10 ; i ++) {
+
+            double level = i / 10.0;
+            // Find the first element of recall array that match with our level
+            // We do this to avoid to re-iterate over all the precisionArray for every levels
+            while(index < recallArray.size() && recallArray.get(index) < level){
+                index++;
+            }
+
+            //Find the max value in the precisionArray, in the bounds : [index, size of the array]
+            double max = 0.0;
+            for (int j = index; j < precisionArray.size(); j++) {
+                if(precisionArray.get(j) > max)
+                    max = precisionArray.get(j);
+            }
+            recalls[i] = max;
+        }
+
+        return recalls;
+    }
+
+    private static double getAveragePrecision(List<Integer> retDocs, List<Integer> revDocs) {
+        /*
         //We'll use an iterator for better time complexity
         Iterator<Integer> iterator = retDocs.iterator();
         int revelantDocsCounter = 0;
@@ -281,5 +363,7 @@ public class Evaluation {
             }
         }
         return precision / revelantDocsCounter;
+        */
+        return 0.0;
     }
 }
